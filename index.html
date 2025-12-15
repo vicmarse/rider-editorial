@@ -6,9 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -25,15 +23,15 @@
       flex-direction: column;
     }
 
-    /* Top controls */
     .topbar {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 10px;
       padding: 12px 16px;
       background: transparent;
       color: #fff;
       pointer-events: auto;
+      user-select: none;
     }
 
     .topbar button {
@@ -47,24 +45,25 @@
 
     .topbar span {
       font-size: 12px;
-      opacity: 0.8;
+      opacity: 0.85;
     }
 
-    /* Pages area */
     .pages-wrapper {
       flex: 1;
       overflow-x: auto;
       overflow-y: hidden;
       scroll-snap-type: x mandatory;
       -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    .pages-wrapper::-webkit-scrollbar { display: none; }
 
     .pages {
       display: flex;
       align-items: center;
       height: 100%;
-      padding: 0 80px;
-      gap: 40px; /* separación entre páginas */
+      padding: 0 60px;
+      gap: 8px; /* 40px -> 8px (80% menos) */
     }
 
     .page {
@@ -83,30 +82,30 @@
       border-radius: 0;
       box-shadow: none;
       display: block;
+      pointer-events: none;
     }
 
-    /* Bottom progress */
     .progress {
       height: 2px;
       background: rgba(255,255,255,0.2);
       width: 100%;
     }
-
     .progress-bar {
       height: 100%;
       width: 0%;
       background: #fff;
-      transition: width 0.2s ease;
+      transition: width 0.15s ease;
     }
   </style>
 </head>
 
 <body>
-  <div class="viewer">
+  <div class="viewer" id="viewer">
     <div class="topbar">
-      <button id="prev">←</button>
-      <button id="next">→</button>
+      <button id="prev" title="Previous (←)">←</button>
+      <button id="next" title="Next (→)">→</button>
       <span id="counter">1 / 72</span>
+      <button id="fs" title="Fullscreen">⛶</button>
     </div>
 
     <div class="pages-wrapper" id="wrapper">
@@ -120,14 +119,18 @@
 
   <script>
     const TOTAL_PAGES = 72;
+
+    const viewer = document.getElementById('viewer');
     const pagesEl = document.getElementById('pages');
     const wrapper = document.getElementById('wrapper');
     const counter = document.getElementById('counter');
     const progress = document.getElementById('progress');
 
+    // Build pages
     for (let i = 1; i <= TOTAL_PAGES; i++) {
       const page = document.createElement('div');
       page.className = 'page';
+      page.dataset.index = String(i);
 
       const img = document.createElement('img');
       img.src = `assets/pages/page-${String(i).padStart(3, '0')}.jpg`;
@@ -137,32 +140,97 @@
       pagesEl.appendChild(page);
     }
 
-    function updateUI() {
-      const scrollLeft = wrapper.scrollLeft;
-      const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
-      const progressPct = (scrollLeft / maxScroll) * 100;
-      progress.style.width = `${progressPct}%`;
+    function getCurrentIndex() {
+      const pages = Array.from(pagesEl.children);
+      const center = wrapper.scrollLeft + (wrapper.clientWidth / 2);
 
-      const pageWidth = pagesEl.children[0].offsetWidth + 40;
-      const currentPage = Math.round(scrollLeft / pageWidth) + 1;
-      counter.textContent = `${currentPage} / ${TOTAL_PAGES}`;
+      let bestIdx = 0;
+      let bestDist = Infinity;
+
+      pages.forEach((p, idx) => {
+        const pCenter = p.offsetLeft + (p.offsetWidth / 2);
+        const dist = Math.abs(pCenter - center);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      });
+
+      return bestIdx; // 0-based
     }
 
-    wrapper.addEventListener('scroll', updateUI);
+    function goToIndex(idx) {
+      const pages = Array.from(pagesEl.children);
+      const clamped = Math.max(0, Math.min(pages.length - 1, idx));
+      pages[clamped].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+    }
 
+    function updateUI() {
+      const maxScroll = wrapper.scrollWidth - wrapper.clientWidth;
+      const pct = maxScroll > 0 ? (wrapper.scrollLeft / maxScroll) * 100 : 0;
+      progress.style.width = `${pct}%`;
+
+      const current = getCurrentIndex() + 1;
+      counter.textContent = `${current} / ${TOTAL_PAGES}`;
+    }
+
+    // Scroll listener
+    wrapper.addEventListener('scroll', () => {
+      window.requestAnimationFrame(updateUI);
+    });
+
+    // Prev/Next: 1 en 1
     document.getElementById('prev').onclick = () => {
-      wrapper.scrollBy({ left: -window.innerWidth * 0.8, behavior: 'smooth' });
+      const idx = getCurrentIndex();
+      goToIndex(idx - 1);
     };
 
     document.getElementById('next').onclick = () => {
-      wrapper.scrollBy({ left: window.innerWidth * 0.8, behavior: 'smooth' });
+      const idx = getCurrentIndex();
+      goToIndex(idx + 1);
     };
 
+    // Keyboard: 1 en 1
     document.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowRight') document.getElementById('next').click();
       if (e.key === 'ArrowLeft') document.getElementById('prev').click();
+      if (e.key.toLowerCase() === 'f') toggleFullscreen();
     });
+
+    // Fullscreen
+    const fsBtn = document.getElementById('fs');
+
+    function isFullscreen() {
+      return document.fullscreenElement || document.webkitFullscreenElement;
+    }
+
+    function requestFS(el) {
+      if (el.requestFullscreen) return el.requestFullscreen();
+      if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+    }
+
+    function exitFS() {
+      if (document.exitFullscreen) return document.exitFullscreen();
+      if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+    }
+
+    function toggleFullscreen() {
+      if (!isFullscreen()) requestFS(viewer);
+      else exitFS();
+    }
+
+    fsBtn.onclick = toggleFullscreen;
+
+    function syncFSButton() {
+      fsBtn.textContent = isFullscreen() ? '⤢' : '⛶';
+      fsBtn.title = isFullscreen() ? 'Exit fullscreen' : 'Fullscreen';
+    }
+
+    document.addEventListener('fullscreenchange', syncFSButton);
+    document.addEventListener('webkitfullscreenchange', syncFSButton);
+
+    // Initial UI
+    updateUI();
   </script>
 </body>
 </html>
-
