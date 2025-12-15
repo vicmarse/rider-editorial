@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Editorial Viewer</title>
+<style>
+  :root{
+    --bg:#0b0b0c;
+    --panel:rgba(255,255,255,.08);
+    --panel2:rgba(255,255,255,.14);
+    --text:rgba(255,255,255,.86);
+    --text2:rgba(255,255,255,.6);
+    --bar:rgba(255,255,255,.22);
+    --barFill:rgba(255,255,255,.86);
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;}
+  *{box-sizing:border-box}
+  .app{height:100%;display:flex;flex-direction:column}
+  .top{
+    position:fixed;left:16px;top:16px;z-index:5;
+    display:flex;gap:10px;align-items:center;
+    padding:10px 12px;border-radius:14px;background:var(--panel);backdrop-filter: blur(12px);
+  }
+  .btn{
+    border:0;border-radius:12px;
+    padding:8px 10px;background:var(--panel2);color:var(--text);
+    cursor:pointer;user-select:none;
+  }
+  .btn:active{transform:translateY(1px)}
+  .meta{display:flex;flex-direction:column;gap:2px;min-width:120px}
+  .meta .a{font-size:12px;letter-spacing:.02em;color:var(--text2)}
+  .meta .b{font-size:13px}
+  .hint{position:fixed;right:16px;top:16px;z-index:5;
+    padding:10px 12px;border-radius:14px;background:var(--panel);backdrop-filter: blur(12px);
+    font-size:12px;color:var(--text2);
+  }
+  .strip{
+    height:100%;
+    display:flex;flex:1;
+    overflow-x:auto;overflow-y:hidden;
+    scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;
+    scroll-behavior:smooth;
+    padding:70px 8vw 42px;
+    gap:28px;
+  }
+  .page{
+    scroll-snap-align:center;
+    height:calc(100vh - 70px - 42px);
+    min-width:min(78vh * 0.707, 64vw); /* approximate A4 ratio */
+    display:flex;align-items:center;justify-content:center;
+  }
+  .page img{
+    height:100%;
+    width:auto;
+    border-radius:18px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.55);
+    background:#111;
+    transform:translateZ(0);
+  }
+  .page.fit img{height:100%;width:auto}
+  .page.onehundred img{height:auto;max-height:none;width:auto}
+  .bottom{
+    position:fixed;left:0;right:0;bottom:0;z-index:6;
+    padding:14px 16px 16px;
+    background:linear-gradient(to top, rgba(11,11,12,.95), rgba(11,11,12,0));
+  }
+  .bar{
+    height:4px;border-radius:4px;background:var(--bar);
+    overflow:hidden;
+  }
+  .fill{height:100%;width:0;background:var(--barFill)}
+  /* hide scrollbars (desktop) */
+  .strip::-webkit-scrollbar{height:10px}
+  .strip::-webkit-scrollbar-track{background:transparent}
+  .strip::-webkit-scrollbar-thumb{background:rgba(255,255,255,.10);border-radius:20px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <button class="btn" id="prev" aria-label="Previous">←</button>
+    <button class="btn" id="next" aria-label="Next">→</button>
+    <button class="btn" id="toggle" aria-label="Toggle size">fit</button>
+    <div class="meta">
+      <div class="a">page</div>
+      <div class="b"><span id="current">1</span> / <span id="total">0</span></div>
+    </div>
+  </div>
+
+  <div class="hint">keys: ← →  ·  space toggles size</div>
+
+  <div class="strip" id="strip" aria-label="Pages"></div>
+
+  <div class="bottom">
+    <div class="bar"><div class="fill" id="fill"></div></div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  const strip = document.getElementById('strip');
+  const currentEl = document.getElementById('current');
+  const totalEl = document.getElementById('total');
+  const fill = document.getElementById('fill');
+  const btnPrev = document.getElementById('prev');
+  const btnNext = document.getElementById('next');
+  const btnToggle = document.getElementById('toggle');
+
+  const manifest = await fetch('assets/manifest.json', {cache:'no-store'}).then(r=>r.json());
+  const pages = manifest.pages || [];
+  totalEl.textContent = pages.length;
+
+  let mode = 'fit'; // 'fit' or 'onehundred'
+  const makePage = (src, idx) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'page fit';
+    wrap.dataset.index = idx;
+
+    const img = document.createElement('img');
+    img.loading = 'lazy';
+    img.decoding = 'async';
+    img.alt = 'page ' + (idx+1);
+    img.dataset.src = src; // lazy set src when near
+    wrap.appendChild(img);
+    return wrap;
+  };
+
+  // Build DOM
+  pages.forEach((src, i) => strip.appendChild(makePage(src, i)));
+
+  const pageNodes = Array.from(strip.querySelectorAll('.page'));
+  const imgNodes = pageNodes.map(p => p.querySelector('img'));
+
+  // Lazy load around index
+  function ensureLoaded(center){
+    const from = Math.max(0, center-2);
+    const to = Math.min(imgNodes.length-1, center+3);
+    for(let i=from;i<=to;i++){
+      const img = imgNodes[i];
+      if(!img.src) img.src = img.dataset.src;
+    }
+  }
+
+  // Find closest page to center
+  function getCenteredIndex(){
+    const mid = strip.scrollLeft + strip.clientWidth/2;
+    let best = 0, bestDist = Infinity;
+    for(let i=0;i<pageNodes.length;i++){
+      const el = pageNodes[i];
+      const left = el.offsetLeft;
+      const w = el.offsetWidth;
+      const center = left + w/2;
+      const dist = Math.abs(center - mid);
+      if(dist < bestDist){bestDist = dist; best = i;}
+    }
+    return best;
+  }
+
+  let active = 0;
+  function updateUI(){
+    currentEl.textContent = (active+1);
+    fill.style.width = ((active)/(pages.length-1 || 1))*100 + '%';
+    ensureLoaded(active);
+  }
+
+  function scrollToIndex(i){
+    i = Math.max(0, Math.min(pages.length-1, i));
+    active = i;
+    pageNodes[i].scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
+    updateUI();
+  }
+
+  // Mode toggle
+  function setMode(nextMode){
+    mode = nextMode;
+    btnToggle.textContent = mode === 'fit' ? 'fit' : '100%';
+    pageNodes.forEach(p => {
+      p.classList.remove('fit','onehundred');
+      p.classList.add(mode === 'fit' ? 'fit' : 'onehundred');
+    });
+  }
+  setMode('fit');
+
+  // Buttons
+  btnPrev.addEventListener('click', ()=>scrollToIndex(active-1));
+  btnNext.addEventListener('click', ()=>scrollToIndex(active+1));
+  btnToggle.addEventListener('click', ()=>setMode(mode === 'fit' ? 'onehundred' : 'fit'));
+
+  // Keyboard
+  window.addEventListener('keydown', (e)=>{
+    if(e.key === 'ArrowLeft') { e.preventDefault(); scrollToIndex(active-1); }
+    if(e.key === 'ArrowRight') { e.preventDefault(); scrollToIndex(active+1); }
+    if(e.key === ' ') { e.preventDefault(); setMode(mode === 'fit' ? 'onehundred' : 'fit'); }
+  });
+
+  // Update active while scrolling (throttled)
+  let t = null;
+  strip.addEventListener('scroll', ()=>{
+    if(t) return;
+    t = requestAnimationFrame(()=>{
+      const idx = getCenteredIndex();
+      if(idx !== active){ active = idx; updateUI(); }
+      t = null;
+    });
+  });
+
+  // Initial load
+  ensureLoaded(0);
+  updateUI();
+
+  // Improve initial centering
+  setTimeout(()=>scrollToIndex(0), 50);
+})();
+</script>
+</body>
+</html>
