@@ -8,112 +8,159 @@
   <style>
     * { box-sizing: border-box; }
 
-    body {
-      margin: 0;
-      background: transparent;
-      overflow: hidden;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    body{
+      margin:0;
+      background:transparent;
+      overflow:hidden;
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;
     }
 
-    .viewer {
-      width: 100vw;
-      height: 100vh;
-      background: transparent;
-      display: flex;
-      flex-direction: column;
+    .viewer{
+      width:100vw;
+      height:100vh;
+      background:transparent;
+      display:flex;
+      flex-direction:column;
+      position:relative;
     }
 
-    /* CONTROLES */
-    .topbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0 8px 60px;
-      color: #fff;
-      user-select: none;
-
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.25s ease;
+    /* PAGES */
+    .pages-wrapper{
+      flex:1;
+      overflow-x:auto;
+      overflow-y:hidden;
+      scroll-snap-type:x mandatory;
+      -webkit-overflow-scrolling:touch;
+      scrollbar-width:none;
     }
+    .pages-wrapper::-webkit-scrollbar{ display:none; }
 
-    /* Mostrar controles al hover del visor */
-    .viewer:hover .topbar {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .topbar button {
-      background: rgba(0,0,0,0.6);
-      border: none;
-      color: #fff;
-      padding: 5px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .topbar span {
-      font-size: 12px;
-      opacity: 0.85;
-    }
-
-    /* PÁGINAS */
-    .pages-wrapper {
-      flex: 1;
-      overflow-x: auto;
-      overflow-y: hidden;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
-    }
-    .pages-wrapper::-webkit-scrollbar { display: none; }
-
-    .pages {
-      display: flex;
-      align-items: center;
-      height: 100%;
+    .pages{
+      display:flex;
+      align-items:center;
+      height:100%;
       padding: 0 60px 20px;
-      gap: 8px;
+      gap:8px;
     }
 
-    .page {
-      flex: 0 0 auto;
+    .page{
+      flex:0 0 auto;
       height: 88%;
-      scroll-snap-align: center;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      scroll-snap-align:center;
+      display:flex;
+      align-items:center;
+      justify-content:center;
     }
 
-    .page img {
-      height: 100%;
-      width: auto;
-      object-fit: contain;
-      border-radius: 0;
-      box-shadow: none;
-      display: block;
-      pointer-events: none;
+    .page img{
+      height:100%;
+      width:auto;
+      object-fit:contain;
+      border-radius:0;
+      box-shadow:none;
+      display:block;
+      pointer-events:none;
     }
 
-    /* PROGRESS */
-    .progress {
-      height: 2px;
-      background: rgba(255,255,255,0.2);
-      width: 100%;
-      opacity: 0;
-      transition: opacity 0.25s ease;
+    /* OVERLAY UI (FLOATING) */
+    .ui{
+      position:absolute;
+      inset:0;
+      pointer-events:none; /* only children will receive when visible */
     }
 
-    .viewer:hover .progress {
-      opacity: 1;
+    .ui .btn,
+    .ui .meta{
+      opacity:0;
+      transition:opacity 0.22s ease;
+      pointer-events:none;
     }
 
-    .progress-bar {
-      height: 100%;
-      width: 0%;
-      background: #fff;
-      transition: width 0.15s ease;
+    /* show on hover */
+    .viewer:hover .ui .btn,
+    .viewer:hover .ui .meta{
+      opacity:1;
+      pointer-events:auto;
+    }
+
+    .ui .btn{
+      position:absolute;
+      background:rgba(0,0,0,0.55);
+      border:none;
+      color:#fff;
+      padding:10px 12px;
+      border-radius:6px;
+      cursor:pointer;
+      font-size:14px;
+      line-height:1;
+    }
+
+    /* left arrow */
+    #prev{
+      left:16px;
+      top:50%;
+      transform:translateY(-50%);
+    }
+
+    /* right arrow */
+    #next{
+      right:16px;
+      top:50%;
+      transform:translateY(-50%);
+    }
+
+    /* top-right meta (counter + fullscreen) */
+    .meta{
+      position:absolute;
+      top:14px;
+      right:16px;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      color:#fff;
+      user-select:none;
+      pointer-events:none;
+    }
+
+    #counter{
+      font-size:12px;
+      background:rgba(0,0,0,0.45);
+      padding:6px 10px;
+      border-radius:999px;
+      pointer-events:none; /* purely informative */
+    }
+
+    #fs{
+      background:rgba(0,0,0,0.55);
+      border:none;
+      color:#fff;
+      padding:8px 10px;
+      border-radius:8px;
+      cursor:pointer;
+      font-size:13px;
+      line-height:1;
+      pointer-events:auto; /* clickable */
+    }
+
+    /* PROGRESS (optional, also floating) */
+    .progress{
+      position:absolute;
+      left:0;
+      right:0;
+      bottom:0;
+      height:2px;
+      background:rgba(255,255,255,0.2);
+      opacity:0;
+      transition:opacity 0.22s ease;
+      pointer-events:none;
+    }
+    .viewer:hover .progress{ opacity:1; }
+
+    .progress-bar{
+      height:100%;
+      width:0%;
+      background:#fff;
+      transition:width 0.15s ease;
     }
   </style>
 </head>
@@ -121,15 +168,19 @@
 <body>
   <div class="viewer" id="viewer">
 
-    <div class="topbar">
-      <button id="prev">←</button>
-      <button id="next">→</button>
-      <span id="counter">1 / 72</span>
-      <button id="fs">⛶</button>
-    </div>
-
     <div class="pages-wrapper" id="wrapper">
       <div class="pages" id="pages"></div>
+    </div>
+
+    <!-- FLOATING UI -->
+    <div class="ui">
+      <button class="btn" id="prev" title="Previous (←)">←</button>
+      <button class="btn" id="next" title="Next (→)">→</button>
+
+      <div class="meta">
+        <div id="counter">1 / 72</div>
+        <button id="fs" title="Fullscreen">⛶</button>
+      </div>
     </div>
 
     <div class="progress">
@@ -174,7 +225,7 @@
     function goTo(idx) {
       const pages = pagesEl.children;
       idx = Math.max(0, Math.min(pages.length - 1, idx));
-      pages[idx].scrollIntoView({ behavior: 'smooth', inline: 'center' });
+      pages[idx].scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
     }
 
     function updateUI() {
